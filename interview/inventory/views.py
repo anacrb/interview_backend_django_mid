@@ -1,3 +1,6 @@
+from datetime import datetime
+
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.views import APIView
@@ -8,6 +11,7 @@ from interview.inventory.models import (
     InventoryTag,
     InventoryType,
 )
+from interview.inventory.repository import DjangoInventoryRepository
 from interview.inventory.schemas import InventoryMetaData
 from interview.inventory.serializers import (
     InventoryLanguageSerializer,
@@ -15,6 +19,7 @@ from interview.inventory.serializers import (
     InventoryTagSerializer,
     InventoryTypeSerializer,
 )
+from interview.inventory.use_cases import GetInventoriesCreatedAfterUseCase
 
 
 class InventoryListCreateView(APIView):
@@ -231,3 +236,38 @@ class InventoryTypeRetrieveUpdateDestroyView(APIView):
 
     def get_queryset(self, **kwargs):
         return self.queryset.get(**kwargs)
+
+class InventoryCreatedAfterView(APIView):
+    def get(self, request: Request, *args, **kwargs) -> Response:
+        date_str = request.query_params.get("date")
+        if not date_str:
+            return Response(
+                {"error": "Please provide a 'date' query parameter (YYYY-MM-DD)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Parse the date string into a date object
+            filter_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Please use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Instantiate the repository and use case
+        inventory_repo = DjangoInventoryRepository()
+        get_inventories_use_case = GetInventoriesCreatedAfterUseCase(inventory_repo)
+
+        try:
+            inventories = get_inventories_use_case.execute(filter_date)
+            serializer = InventorySerializer(inventories, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            # Catch any unexpected errors from the use case or repository
+            return Response(
+                {"error": f"An unexpected error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
