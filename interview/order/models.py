@@ -16,6 +16,7 @@ class Order(TimestampedModel, IsActiveModel, models.Model):
     start_date = models.DateField()
     embargo_date = models.DateField()
     tags = models.ManyToManyField(OrderTag, related_name="orders")
+    is_active = models.BooleanField()
 
     def __str__(self) -> str:
         return f"{self.inventory.name} - {self.start_date}"
